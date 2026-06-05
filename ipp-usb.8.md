@@ -199,6 +199,16 @@ continues until end of line:
     variable 1 = value 1  ; and another comment
     variable 2 = value 2
 
+### Daemon parameters
+
+Daemon parameters are all in the `[daemon]` section:
+
+    [daemon]
+      # Require root privileges at startup. Set to false only if udev
+      # rules grant the daemon user access to IPP-over-USB devices,
+      # typically via the lp group.
+      require-root = true # true | false
+
 ### Network parameters
 
 Network parameters are all in the `[network]` section:

@@ -312,8 +312,10 @@ func main() {
 	}
 
 	// Check user privileges
-	if os.Geteuid() != 0 {
+	if Conf.RequireRoot && os.Geteuid() != 0 {
 		InitLog.Exit(0, "This program requires root privileges")
+	} else if os.Geteuid() != 0 {
+		Log.Info(' ', "Running without root privileges")
 	}
 
 	// If mode is "check", we are done

@@ -24,6 +24,7 @@ const (
 
 // Configuration represents a program configuration
 type Configuration struct {
+	RequireRoot        bool           // Require running as root
 	HTTPMinPort        int            // Starting port number for HTTP to bind to
 	HTTPMaxPort        int            // Ending port number for HTTP to bind to
 	DNSSdEnable        bool           // Enable DNS-SD advertising
@@ -43,6 +44,7 @@ type Configuration struct {
 
 // Conf contains a global instance of program configuration
 var Conf = Configuration{
+	RequireRoot:        true,
 	HTTPMinPort:        60000,
 	HTTPMaxPort:        65535,
 	DNSSdEnable:        true,
@@ -106,6 +108,12 @@ func confLoadInternal(path string) error {
 		}
 
 		switch {
+		case confMatchName(rec.Section, "daemon"):
+			switch {
+			case confMatchName(rec.Key, "require-root"):
+				err = rec.LoadBool(&Conf.RequireRoot)
+			}
+
 		case confMatchName(rec.Section, "network"):
 			switch {
 			case confMatchName(rec.Key, "http-min-port"):

@@ -15,6 +15,7 @@ import (
 
 // Don't forget to update testData when ipp-ini.conf changes
 var testData = []struct{ section, key, value string }{
+	{"daemon", "require-root", "true"},
 	{"network", "http-min-port", "60000"},
 	{"network", "http-max-port", "65535"},
 	{"network", "dns-sd", "enable"},
