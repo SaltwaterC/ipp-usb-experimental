@@ -1,7 +1,32 @@
-# ipp-usb
+# ipp-usb-experimental
 
 ![GitHub](https://img.shields.io/github/license/OpenPrinting/ipp-usb)
 [![Go Report Card](https://goreportcard.com/badge/github.com/OpenPrinting/ipp-usb)](https://goreportcard.com/badge/github.com/OpenPrinting/ipp-usb)
+
+## Experimental
+
+This `experimental` repository contains changes that are not available upstream and are primarily intended to solve specific problems in my own environment. They are not designed, tested, or supported as general-purpose solutions, and may not work outside their narrow scope. Caveat emptor: it works on my machine.
+
+- `escl-auto-release` quirk for enabling the tracking of eSCL scan jobs and triggering an auto-DELETE upon encountering no furhter pages. This workarounds numerous clients that implement the eSCL Mopria spec to the letter whereas some scanners (like those made by Kyocera) do not automatically release the scan jobs upon encountering the final page. The Mopria Scan Android application triggers this auto-DELTE upon encountering the final page so the spec authors are aware about this deficiency.
+- An option for binding to specific network interface. Noting here the upstream maintainer notice on the unmerged PR pulled into this repository that this does not work with IP addressess that change dynamically, but for the purpose of advertising the service on the correct network interface and avoiding accidental spillover into unintended VLANs for multi-homed machines, this feature is sufficient unless dynamic addressing is in place.
+- `require-root` daemon feature flag. This is to disable the requirement for running the `ipp-usb` service under EUID 0. Unless specific quirks are enabled, which may require elevated privileges to the USB stack due to lack of specific USB subclass, running under root is an unjustified amount of risk. The udev rule which is included in the Debian package is sufficient for some printers so your mileage may vary here. The udev rule delegates privileged access to the `lp` group.
+
+Sample systemd unit for `require-root = false`:
+
+```
+[Unit]
+Description=Daemon for IPP over USB printer support
+Documentation=man:ipp-usb(8)
+After=cups.service avahi-daemon.service network-online.target
+Wants=avahi-daemon.service
+
+[Service]
+User=ipp-usb
+Group=ipp-usb
+SupplementaryGroups=lp
+Type=simple
+ExecStart=/usr/sbin/ipp-usb udev
+```
 
 ## Introduction
 
@@ -80,386 +105,6 @@ This program has very few external dependencies, namely:
 * `libavahi-common` and `libavahi-client` for DNS-SD
 * Running Avahi daemon
 
-## Binary packages
-
-Binary packages available for the following Linux distros:
-* **Debian** (10)
-* **Fedora** (29, 30, 31 and 32)
-* **openSUSE** (Tumbleweed)
-* **Ubuntu** (18.04, 19.04, 19.10 and 20.04)
-
-**Linux Mint** users may use Ubuntu packages:
-* Linux Mint 18.x - use packages for Ubuntu 16.04
-* Linux Mint 19.x - use packages for Ubuntu 18.04
-
-Follow this link for downloads: https://download.opensuse.org/repositories/home:/pzz/
-
-## Not only Linux
-
-We are glad to announce that `ipp-usb` was recently included into the
-FreeBSD ports: https://www.freshports.org/print/ipp-usb/
-
-Hope, NetBSD/OpenBSD support will be added as well, so technology
-becomes not Linux-only, but UNIX-wide.
-
-## The ipp-usb Snap
-
-ipp-usb is also available as a Snap in the Snap Store: https://snapcraft.io/ipp-usb
-
-Before you install the Snap, uninstall any already existing
-installation of ipp-usb.
-
-Simply install it via any GUI client for the Snap Store (Like "Ubuntu
-Software") or via command line:
-
-    sudo snap install --edge ipp-usb
-
-Now you can connect and disconnect IPP-over-USB devices and ipp-usb
-gets started by the Snap whenever needed. Also devices which are
-already connected during boot, start, or update of the Snap are
-considered.
-
-You can also use
-
-    ipp-usb status
-
-to check the status of the running ipp-usb daemon (supported device
-must be connected for the ipp-usb daemon to be running, accesses only
-the ipp-usb daemon of the Snap) and
-
-    ipp-usb check
-
-to scan the USB for the presence of potentially supported USB devices
-(7/1/4 interface protocol). This command requires access to the raw
-USB and therefore on many systems root privileges are required.
-
-The Snap is automatically updated when further development on ipp-usb
-happens.
-
-The configuration file is here:
-
-    /var/snap/ipp-usb/common/etc/ipp-usb.conf
-
-You can edit it and afterwards restart the Snap to use the changed
-configuration.
-
-Incompatibilities of particular devices are handled by workarounds
-defined in the quirk files. You find them here:
-
-    /var/snap/ipp-usb/common/quirks
-
-You can add your own quirk files (but if they solve your problem,
-please report an issue here, with your quirk file attached, so that
-others with the same problem will get helped, too).
-
-For quick tests you can also edit the existing files, but they will
-get replaced (and so your changes lost) on the next update of the
-Snap, as we are changing them on any report of further device
-incompatibilities.
-
-The log file is here
-
-    /var/snap/ipp-usb/common/var/log
-
-and device state files (to assure that each device appears on the same
-port and with the same DNS-SD service name) are here:
-
-    /var/snap/ipp-usb/common/var/dev
-
-You can also build the Snap locally. This is useful when
-
-* You want to modify ipp-usb
-* You want to learn about snapping Go projects
-* You want to learn about how to use UDEV from within a Snap (note that a Snap cannot install UDEV rules into the system)
-
-To do so, run from the main directory of this source repository
-
-    snapcraft snap
-
-and then install the resulting Snap with
-
-    sudo snap install --dangerous ipp-usb*.snap
-
-An installed Snap from the Snap Store will get overwritten/replaced by your Snap.
-
-Some technical notes about this Snap:
-
-Snapping the Go project with one Go library taken from upstream (and
-not from Ubuntu Core) was rather straight-forward. Only observation
-was that the Go plugin seems not to do "make install". So I had to use
-an "override-build" to manually install the auxiliary files
-(ipp-usb.conf, quirk files). I also have adapted the auxiliary file
-and state directories in paths.go in the "override-build" scriptlet.
-
-The real challenge of this Snap was to trigger ipp-usb on the
-appearing (and also the presence) of IPP-over-USB devices.
-
-In the classic installation of ipp-usb (via "make install" or RPM/DEB
-package installation) a UDEV rules file and a systemd service file (in
-systemd-udev/) are installed, so that the system automatically triggers
-the launch of ipp-usb when an appropriate device is connected or
-already present. A Snap is not able to do so. It cannot install any
-files into the system. It can only bring its own, static file system
-and create files only in its own state directory. These locations are
-not scanned for UDEV rules.
-
-So the Snap must discover the devices without its own UDEV rules, but
-it still can use UDEV. The trick is to do a generic monitoring of UDEV
-events and filtering out the USB devices with IPP-over-USB interface
-(7/1/4). If such a device appears, we trigger and ipp-usb launch. We
-also check on startup of the Snap whether there is such a device
-already and if so, we also trigger an ipp-usb launch.
-
-ipp-usb is run, as in the classic installation, with "udev"
-argument. This way it stops by itself when there is no device any more
-(and we do not need to observe the disappearal events of the devices)
-and it is assured that only one single instance of ipp-usb is running.
-
-To do this with low coding effort I use the UDEV command line tool
-udevadm in a shell script (snap/local/run-ipp-usb). Once it runs in
-"monitor" mode to observe the UDEV events. Then we parse the output
-lines to only consider the ones for a device appearing and run
-"udevadm info -q property" on each device path, to get the properties
-and filter the 7/1/4 interface. In the beginning we use "udevadm
-trigger" to find the already passed appearal event of a device which
-is already present. So the shell script is an auxiliary daemon to
-start ipp-usb when needed.
-
-## The ipp-usb Rock
-
-### Install from GitHub Container Registry
-#### Prerequisites
-
-1. **Docker Installed**: Ensure Docker is installed on your system. You can download it from the [official Docker website](https://www.docker.com/get-started).
-```sh
-  sudo snap install docker
-```
-
-#### **Running the `ipp-usb` Container with Persistent Storage**
-
-To run the `ipp-usb` container while ensuring that its state persists across restarts, follow these steps.
-
-#### **1. Pull the `ipp-usb` Docker Image**
-The latest image is available on the GitHub Container Registry. Pull it using:
-```sh
-sudo docker pull ghcr.io/openprinting/ipp-usb:latest
-```
-
-#### **2. Create Persistent Storage Volumes**
-To ensure that configuration settings and printer state persist across container restarts, create two Docker volumes:
-
-```sh
-sudo docker volume create ipp-usb-state
-sudo docker volume create ipp-usb-conf
-```
-
-These volumes store:
-
-- **`ipp-usb-state` (`/var/ipp-usb/`)**
-  - Device state files (`/var/ipp-usb/dev/`) – Ensures stable TCP port allocation and DNS-SD name resolution.
-  - Lock files (`/var/ipp-usb/lock/`) – Prevents multiple instances from running simultaneously.
-  - Log files (`/var/log/ipp-usb/`) – Can be optionally mounted if needed for debugging.
-
-- **`ipp-usb-conf` (`/etc/ipp-usb/`)**
-  - Configuration file (`/etc/ipp-usb/ipp-usb.conf`) – Stores user-defined settings.
-  - Quirks files (`/etc/ipp-usb/quirks/`) – Contains printer-specific workarounds.
-
-#### **3. Run the Container with Required Mounts**
-Start the container with appropriate options:
-
-```sh
-sudo docker run -d --network host \
-    -v /dev/bus/usb:/dev/bus/usb:ro \
-    -v ipp-usb-state:/var/ipp-usb \
-    -v ipp-usb-conf:/etc/ipp-usb \
-    --device-cgroup-rule='c 189:* rmw' \
-    --name ipp-usb \
-    ghcr.io/openprinting/ipp-usb:latest
-```
-
-- **`--network host`** → Uses the host’s network to enable proper IPP-over-USB and Avahi service discovery.
-- **`-v /dev/bus/usb:/dev/bus/usb:ro`** → Grants read-only access to USB devices for printer detection.
-- **`-v ipp-usb-state:/var/ipp-usb`** → Mounts the persistent storage volume for printer state, lock files, and logs.
-- **`-v ipp-usb-conf:/etc/ipp-usb`** → Ensures configuration and quirks files persist across reboots.
-- **`--device-cgroup-rule='c 189:* rmw'`** → Grants read, write, and management permissions for USB printers inside the container.
-
-
-### Building and Running `ipp-usb` Locally
-
-#### Prerequisites
-
-1. **Docker Installed**: Ensure Docker is installed on your system. You can download it from the [official Docker website](https://www.docker.com/get-started) or from the Snap Store:
-```sh
-  sudo snap install docker
-```
-
-2. **Rockcraft**: Rockcraft should be installed. You can install Rockcraft using the following command:
-```sh
-  sudo snap install rockcraft --classic
-```
-
-**To Build and Run the `ipp-usb` Rock Image Locally, follow these steps**
-
-#### **1. Build the `ipp-usb` Rock Image**
-The first step is to build the Rock image from the `rockcraft.yaml` configuration file. This image will include all required dependencies and configurations for `ipp-usb`.
-
-Navigate to the directory containing `rockcraft.yaml` and run:
-```sh
-  rockcraft pack -v
-```
-
-#### **2. Convert the Rock Image to a Docker Image**
-Once the `.rock` file is built, convert it into a Docker image using:
-```sh
-sudo rockcraft.skopeo --insecure-policy copy oci-archive:<rock_image> docker-daemon:ipp-usb:latest
-```
-
-#### **3. Create Persistent Storage Volumes**
-To ensure that configuration settings and printer state persist across container restarts, create two Docker volumes:
-
-```sh
-sudo docker volume create ipp-usb-state
-sudo docker volume create ipp-usb-conf
-```
-
-These volumes store:
-
-- **`ipp-usb-state` (`/var/ipp-usb/`)**
-  - Device state files (`/var/ipp-usb/dev/`) – Ensures stable TCP port allocation and DNS-SD name resolution.
-  - Lock files (`/var/ipp-usb/lock/`) – Prevents multiple instances from running simultaneously.
-  - Log files (`/var/log/ipp-usb/`) – Can be optionally mounted if needed for debugging.
-
-- **`ipp-usb-conf` (`/etc/ipp-usb/`)**
-  - Configuration file (`/etc/ipp-usb/ipp-usb.conf`) – Stores user-defined settings.
-  - Quirks files (`/etc/ipp-usb/quirks/`) – Contains printer-specific workarounds.
-
-#### **4. Run the Container with Required Mounts**
-Start the container with appropriate options:
-
-```sh
-sudo docker run -d --network host \
-    -v /dev/bus/usb:/dev/bus/usb:ro \
-    -v ipp-usb-state:/var/ipp-usb \
-    -v ipp-usb-conf:/etc/ipp-usb \
-    --device-cgroup-rule='c 189:* rmw' \
-    --name ipp-usb \
-    ipp-usb:latest
-```
-
-- **`--network host`** → Uses the host’s network to enable proper IPP-over-USB and Avahi service discovery.
-- **`-v /dev/bus/usb:/dev/bus/usb:ro`** → Grants read-only access to USB devices for printer detection.
-- **`-v ipp-usb-state:/var/ipp-usb`** → Mounts the persistent storage volume for printer state, lock files, and logs.
-- **`-v ipp-usb-conf:/etc/ipp-usb`** → Ensures configuration and quirks files persist across reboots.
-- **`--device-cgroup-rule='c 189:* rmw'`** → Grants read, write, and management permissions for USB printers inside the container.
-
-### Accessing the Container Shell
-
-To enter the running `ipp-usb` container and access a shell inside it, use:
-```sh
-  sudo docker exec -it ipp-usb bash
-```
-This allows you to inspect logs, debug issues, or manually run commands inside the container.
-
-### Configuration
-
-The `ipp-usb` container uses a configuration file located at:
-```sh
-/etc/ipp-usb/ipp-usb.conf
-```
-By default, the container uses the built-in configuration, which can be modified from inside the container.
-
-**Modifying the Configuration File Inside the Container**
-
-#### **1. Enter the Running Container**
-Use the following command to access the container’s shell:
-```sh
-sudo docker exec -it ipp-usb bash
-```
-
-#### **2. Open the Configuration File in Nano**
-Once inside the container, open the configuration file using `nano`:
-```sh
-nano /etc/ipp-usb/ipp-usb.conf
-```
-
-#### **3. Edit and Save the File**
-- Make the necessary changes to the file.
-- Press `CTRL + X`, then `Y`, and hit `Enter` to save the changes.
-
-#### **4. Restart the Container to Apply Changes**
-Exit the container and restart it to apply the updated configuration:
-```sh
-sudo docker restart ipp-usb
-```
-
-### **Viewing Logs in the `ipp-usb` Container**
-
-The `ipp-usb` container logs important events and errors to `/var/log/ipp-usb/`. Logs are categorized into:
-
-- **Main log file:** `/var/log/ipp-usb/main.log` → Captures overall service activity, including errors and general events.
-- **Per-device logs:** `/var/log/ipp-usb/<DEVICE>.log` → Individual log files for each detected printer, helpful for troubleshooting device-specific issues.
-
-#### **1. Using Docker Logs**
-
-To view real-time logs from the running container, use:
-```sh
-sudo docker logs -f ipp-usb
-```
-- The `-f` flag follows the logs in real-time.
-- Replace `ipp-usb` with your actual container name if different.
-
-#### **2. Viewing Logs Inside the Container**
-
-If you need to inspect logs manually, first enter the container shell:
-```sh
-sudo docker exec -it ipp-usb bash
-```
-
-Once inside the container, you can use the following commands:
-
-#### **2.1 Monitor Logs in Real-Time**
-
-- **Main log file:**
-  ```sh
-  tail -f /var/log/ipp-usb/main.log
-  ```
-  This continuously displays new log entries for the entire service.
-
-- **Per-device log file (Replace `<DEVICE>` with your printer's identifier):**
-  ```sh
-  tail -f /var/log/ipp-usb/<DEVICE>.log
-  ```
-
-#### **2.2 Display Full Log Files**
-
-- **Show full contents of the main log file:**
-  ```sh
-  cat /var/log/ipp-usb/main.log
-  ```
-
-- **Show logs for a specific device:**
-  ```sh
-  cat /var/log/ipp-usb/<DEVICE>.log
-  ```
-
-#### **2.3 List Available Device Logs**
-
-To see all available per-device log files, run:
-```sh
-ls /var/log/ipp-usb/
-```
-
-#### **3. Persisting Logs Across Container Restarts**
-
-If you want logs to persist across container restarts, you should mount the log directory using a Docker volume or a host directory.
-
-**Required Docker Flags for Log Persistence:**
-- `-v <volume-name>:/var/log/ipp-usb` → Mounts a Docker volume for log persistence.
-- **or**
-- `-v <host-directory>:/var/log/ipp-usb` → Mounts a host directory to retain logs outside the container.
-
-These options ensure that logs remain available even after the container stops or is recreated, allowing for easier troubleshooting and auditing.
-
 ## Installation from source
 
 You will need to install the following packages (exact name depends
@@ -473,8 +118,8 @@ of your Linux distro):
 
 Building is really simple:
 
-    git clone https://github.com/OpenPrinting/ipp-usb.git
-    cd ipp-usb
+    git clone https://github.com/SaltwaterC/ipp-usb-experimental.git
+    cd ipp-usb-experimental
     make
 
 Then you may `make install` or just try to run `./ipp-usb` directly from
